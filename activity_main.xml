@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent"
+    android:layout_height="match_parent" android:padding="8dp">
+
+    <EditText android:id="@+id/etIp" android:layout_width="0dp" android:layout_height="wrap_content"
+        android:hint="IP الراوتر (مثال: 192.168.8.1)" android:inputType="textUri"
+        app:layout_constraintTop_toTopOf="parent" app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/btnOpen" android:layout_marginEnd="8dp" />
+
+    <Button android:id="@+id/btnOpen" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="فتح" app:layout_constraintTop_toTopOf="parent" app:layout_constraintEnd_toEndOf="parent" />
+
+    <EditText android:id="@+id/etUser" android:layout_width="0dp" android:layout_height="wrap_content"
+        android:hint="اسم المسؤول (admin)" app:layout_constraintTop_toBottomOf="@+id/etIp"
+        app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent" />
+
+    <EditText android:id="@+id/etPass" android:layout_width="0dp" android:layout_height="wrap_content"
+        android:hint="كلمة سر الإدارة" android:inputType="textPassword" app:layout_constraintTop_toBottomOf="@+id/etUser"
+        app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent" />
+
+    <EditText android:id="@+id/etSsid" android:layout_width="0dp" android:layout_height="wrap_content"
+        android:hint="SSID الجديد (اختياري)" app:layout_constraintTop_toBottomOf="@+id/etPass"
+        app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent" />
+
+    <EditText android:id="@+id/etWifiPass" android:layout_width="0dp" android:layout_height="wrap_content"
+        android:hint="كلمة سر الواي فاي الجديدة (اختياري)" android:inputType="textPassword"
+        app:layout_constraintTop_toBottomOf="@+id/etSsid" app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <Button android:id="@+id/btnInject" android:layout_width="0dp" android:layout_height="wrap_content"
+        android:text="حقن التغييرات" app:layout_constraintTop_toBottomOf="@+id/etWifiPass"
+        app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent" />
+
+    <WebView android:id="@+id/webview" android:layout_width="0dp" android:layout_height="0dp"
+        app:layout_constraintTop_toBottomOf="@+id/btnInject" app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
