@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- نسمحو بالـ HTTP العادي مع الراوتر و GitHub Pages -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain>192.168.8.1</domain>
+        <domain includeSubdomains="true">github.io</domain>
+        <domain>localhost</domain>
+    </domain-config>
+</network-security-config>
