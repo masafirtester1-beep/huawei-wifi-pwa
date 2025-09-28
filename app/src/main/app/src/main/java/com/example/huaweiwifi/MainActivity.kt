@@ -13,7 +13,7 @@ class MainActivity : AppCompatActivity() {
         webView.webViewClient = WebViewClient()
         webView.settings.javaScriptEnabled = true
 
-        // تحميل index.html من assets
+        // تحميل index.html من مجلد assets
         webView.loadUrl("file:///android_asset/index.html")
 
         setContentView(webView)
