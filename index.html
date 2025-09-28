@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Huawei Wi‑Fi Helper (PWA)</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="icon" href="icons/icon.svg">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Register Service Worker for PWA installability (must be served over HTTPS or localhost)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(console.error);
+      });
+    }
+  </script>
+</head>
+<body>
+  <header>
+    <h1>مساعد تغيير واي‑فاي هواوي (PWA تجريبية)</h1>
+    <p class="muted">تطبيق ويب قابل للتثبيت. ينشئ لك <b>Bookmarklet</b> (زر في المتصفح) لتعبئة صفحة الراوتر تلقائيًا.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>1) إعداداتك</h2>
+      <div class="grid">
+        <label>IP الراوتر (Gateway)
+          <input id="ip" placeholder="مثال: 192.168.8.1" value="192.168.8.1">
+        </label>
+        <label>اسم مستخدم الإدارة
+          <input id="adminUser" placeholder="admin">
+        </label>
+        <label>كلمة سر الإدارة
+          <input id="adminPass" type="password" placeholder="••••••••">
+        </label>
+        <label>SSID الجديد
+          <input id="ssid" placeholder="اسم الشبكة الجديد (اختياري)">
+        </label>
+        <label>كلمة سر الواي‑فاي الجديدة
+          <input id="wifiPass" type="password" placeholder="كلمة سر جديدة (اختياري)">
+        </label>
+      </div>
+      <button id="btnGen">توليد الـ Bookmarklet</button>
+      <p id="bmWrap" class="mt"></p>
+      <p class="hint">طريقة الاستعمال على الهاتف (Chrome): احفظ الرابط كإشارة مرجعية (Bookmark)، ثم عند فتح صفحة الراوتر اضغط على الإشارة المرجعية لتشغيل الحقن.</p>
+      <details class="warn">
+        <summary>قيود تقنية مهمة</summary>
+        <ul>
+          <li>لا يمكن للتطبيق الاتصال مباشرة بواجهة الراوتر بسبب <b>CORS</b> و<b>mixed content</b>. لذلك نستعمل Bookmarklet يعمل داخل صفحة الراوتر نفسها.</li>
+          <li>إذا كانت واجهة الراوتر عبر HTTPS بشهادة غير موثوقة، قد تحتاج قبول الاستثناء يدويًا قبل تشغيل الـ Bookmarklet.</li>
+        </ul>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>2) افتح صفحة الإدارة</h2>
+      <p>افتح:
+        <a id="adminLink" target="_blank" rel="noreferrer noopener"></a>
+      </p>
+      <ol>
+        <li>اتصل بشبكة الراوتر.</li>
+        <li>افتح الرابط أعلاه.</li>
+        <li>بعد تحميل الصفحة، اضغط إشارة الـ Bookmarklet التي أنشأناها.</li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2>ملاحظات أمان</h2>
+      <ul>
+        <li>لا نخزن معلوماتك. يتم توليد كود محليًا في متصفحك.</li>
+        <li>نفّذ الـ Bookmarklet فقط وأنت على صفحة الراوتر الداخلية.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <small>نسخة تجريبية — قد تختلف الحقول حسب موديل الراوتر.</small>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
