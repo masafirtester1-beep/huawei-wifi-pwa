@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Huawei Wi-Fi Helper</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Huawei Wi-Fi Helper</h1>
+  </header>
+
+  <main>
+    <p>هذا اختبار محلي للتأكد أن WebView يعمل.</p>
+
+    <div class="card">
+      <label>Gateway (الراوتر)</label>
+      <input id="gw" value="http://192.168.8.1" />
+
+      <label>اسم المستخدم</label>
+      <input id="user" value="admin" />
+
+      <label>كلمة سر الإدارة</label>
+      <input id="pass" type="password" placeholder="••••••" />
+
+      <button id="open">فتح صفحة الراوتر داخل المتصفح</button>
+    </div>
+
+    <p class="hint">بعد التأكد أن الصفحة تشتغل، يمكن لاحقًا تحويل التحميل إلى
+      GitHub Pages بدل الملف المحلي.</p>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
