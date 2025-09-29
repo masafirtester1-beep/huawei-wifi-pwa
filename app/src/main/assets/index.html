@@ -1,22 +1,48 @@
-<!DOCTYPE html>
-<html lang="ar">
+<!doctype html>
+<html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <title>Huawei Wifi Helper</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Huawei Wi-Fi Helper</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <h1>📶 Huawei Wifi Helper</h1>
+  <header>
+    <h1>Huawei WiFi Helper📶</h1>
+  </header>
 
-  <div class="container">
-    <label for="gateway">أدخل عنوان الراوتر:</label>
-    <input type="text" id="gateway" placeholder="مثال: 192.168.8.1">
-    
-    <button onclick="checkStatus()">🔍 فحص الإتصال</button>
-    <button onclick="listDevices()">💻 عرض الأجهزة</button>
-  </div>
+  <main>
+    <section class="card">
+      <label>عنوان الراوتر (Gateway)</label>
+      <input id="gateway" placeholder="مثال: 192.168.8.1" value="192.168.8.1">
 
-  <div id="output"></div>
+      <div class="buttons">
+        <button id="checkBtn">فحص الإتصال 🔍</button>
+        <button id="devicesBtn">عرض الأجهزة 💻</button>
+      </div>
+
+      <div class="info">
+        <p><strong>معلومات الراوتر:</strong> <span id="routerInfo">—</span></p>
+        <p><strong>مستوى الإشارة (RSSI):</strong> <span id="rssi">غير متاح</span></p>
+        <p><strong>SSID:</strong> <span id="ssid">—</span></p>
+      </div>
+
+      <hr>
+
+      <h3>تغيير كلمة مرور الواي-فاي</h3>
+      <label for="newPass">كلمة المرور الجديدة</label>
+      <input id="newPass" placeholder="أدخل كلمة السر الجديدة">
+
+      <label for="adminUser">اسم مستخدم المدير</label>
+      <input id="adminUser" placeholder="admin">
+
+      <label for="adminPass">كلمة مرور المدير</label>
+      <input id="adminPass" placeholder="admin password" type="password">
+
+      <button id="changePassBtn">تغيير كلمة السر</button>
+      <p id="changeResult"></p>
+    </section>
+  </main>
 
   <script src="app.js"></script>
 </body>
