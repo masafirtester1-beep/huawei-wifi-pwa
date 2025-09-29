@@ -1,21 +1,40 @@
+
 package com.example.huaweiwifi
 
 import android.annotation.SuppressLint
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Bundle
-import android.util.Base64
+import android.util.Log
 import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
-import okhttp3.*
-import java.io.IOException
+
+// ✅ OkHttp (حلّ الخطأ)
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.Response
+import java.util.concurrent.TimeUnit
 import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
+
     private lateinit var webView: WebView
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .followRedirects(true).followSslRedirects(true).build()
+    private val client: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,138 +42,151 @@ class MainActivity : AppCompatActivity() {
 
         webView = WebView(this)
         setContentView(webView)
-        webView.settings.javaScriptEnabled = true
-        webView.webViewClient = WebViewClient()
-        webView.addJavascriptInterface(AndroidBridge(), "Android")
+
+        with(webView.settings) {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            cacheMode = WebSettings.LOAD_DEFAULT
+            builtInZoomControls = false
+            displayZoomControls = false
+            allowFileAccessFromFileURLs = true
+            allowUniversalAccessFromFileURLs = true
+            mediaPlaybackRequiresUserGesture = false
+        }
+
+        webView.webViewClient = object : WebViewClient() {}
+        webView.webChromeClient = WebChromeClient()
+
+        // واجهة JS ليتواصل معها app.js
+        webView.addJavascriptInterface(AppBridge(this), "Android")
+
+        // حمّل الواجهة من مجلد الأصول
         webView.loadUrl("file:///android_asset/index.html")
     }
 
-    inner class AndroidBridge {
+    inner class AppBridge(private val ctx: Context) {
 
-        // === (A) معلومات الواي فاي المحلية ===
+        // تزويد الجافاسكريبت بمعلومات SSID/RSSI إن توفرت
         @JavascriptInterface
         fun getWifiInfo(): String {
-            return try {
-                val wm = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
-                val conn = wm.connectionInfo
-                val ssid = conn.ssid?.replace("\"", "") ?: ""
-                val rssi = conn.rssi
-                JSONObject().apply {
-                    put("ssid", ssid)
-                    put("rssi", rssi)
-                }.toString()
+            val result = JSONObject()
+            try {
+                val wifiManager =
+                    ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+
+                @Suppress("DEPRECATION")
+                val info = wifiManager.connectionInfo
+
+                // ملاحظة: على أندرويد 8+ قد تحتاج صلاحيات الموقع كي يظهر الـ SSID
+                val ssid: String? =
+                    if (info != null && info.ssid != WifiManager.UNKNOWN_SSID) {
+                        info.ssid?.replace("\"", "")
+                    } else {
+                        null
+                    }
+
+                val rssi: Int? = info?.rssi
+
+                result.put("ssid", ssid ?: "غير متاح")
+                result.put("rssi", rssi ?: JSONObject.NULL)
             } catch (e: Exception) {
-                JSONObject().put("error", e.message ?: "wifi error").toString()
+                result.put("ssid", "خطأ")
+                result.put("rssi", JSONObject.NULL)
+            }
+            return result.toString()
+        }
+
+        // حفظ بيانات الأدمن محلياً (SharedPreferences)
+        @JavascriptInterface
+        fun saveAdmin(user: String, pass: String) {
+            val sp = ctx.getSharedPreferences("admin_store", Context.MODE_PRIVATE)
+            sp.edit().putString("user", user).putString("pass", pass).apply()
+        }
+
+        @JavascriptInterface
+        fun getAdminUser(): String {
+            val sp = ctx.getSharedPreferences("admin_store", Context.MODE_PRIVATE)
+            return sp.getString("user", "admin") ?: "admin"
+        }
+
+        @JavascriptInterface
+        fun getAdminPass(): String {
+            val sp = ctx.getSharedPreferences("admin_store", Context.MODE_PRIVATE)
+            return sp.getString("pass", "") ?: ""
+        }
+
+        // فحص إن كان الاتصال الحالي عبر Wi-Fi
+        @JavascriptInterface
+        fun isWifiConnected(): Boolean {
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val network = cm.activeNetwork ?: return false
+                val caps = cm.getNetworkCapabilities(network) ?: return false
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+            } else {
+                @Suppress("DEPRECATION")
+                cm.activeNetworkInfo?.type == ConnectivityManager.TYPE_WIFI
             }
         }
 
-        // === (B) طلب تغيير كلمة السر — عام وقابل للتخصيص ===
-        // jsonStr أمثلة أسفل (في JS)
+        // طلب GET عام (للراوتر مثلاً)
         @JavascriptInterface
-        fun changeWifiPassword(jsonStr: String): String {
-            val resp = JSONObject().put("ok", false)
+        fun httpGet(url: String): String {
             return try {
-                val j = JSONObject(jsonStr)
-
-                val scheme = j.optString("scheme", "http")
-                val host   = j.getString("host")              // مثال: 192.168.1.1
-                val port   = j.optInt("port", -1)             // 80/443 أو -1
-                val path   = j.getString("path")              // مثال: "/api/change_password"
-                val method = j.optString("method", "POST")    // POST/GET
-                val auth   = j.optString("auth", "none")      // none/basic/hilink
-                val user   = j.optString("user", "")
-                val pass   = j.optString("pass", "")
-                val newPw  = j.getString("newPassword")       // كلمة السر الجديدة
-                val bodyType = j.optString("bodyType", "json")// json/form
-                val extra   = j.optJSONObject("extra") ?: JSONObject()
-
-                val url = buildString {
-                    append("$scheme://$host")
-                    if (port != -1) append(":$port")
-                    append(path)
-                }
-
-                val headers = Headers.Builder()
-                // Authorization
-                when (auth.lowercase()) {
-                    "basic" -> {
-                        val b = Base64.encodeToString("$user:$pass".toByteArray(), Base64.NO_WRAP)
-                        headers.add("Authorization", "Basic $b")
-                    }
-                    "hilink" -> {
-                        // Huawei HiLink: نحتاج token قبل POST
-                        // 1) GET token (غالباً من /api/webserver/SesTokInfo)
-                        val sesTok = getHiLinkSesTok(host, port)
-                        if (!sesTok.first) {
-                            return resp.put("message", "HiLink token failed").toString()
-                        }
-                        headers.add("__RequestVerificationToken", sesTok.second)
-                        // كوكي الجلسة يتحط تلقائياً من client (استعملنا نفس OkHttpClient)
-                    }
-                }
-
-                // Body
-                val reqBody: RequestBody = when (bodyType.lowercase()) {
-                    "form" -> {
-                        // أسماء الحقول تقدر تغيّرها من extra
-                        val form = FormBody.Builder()
-                            .add(extra.optString("adminUserField", "adminUser"), user)
-                            .add(extra.optString("adminPassField", "adminPass"), pass)
-                            .add(extra.optString("newPassField",  "newPass"),  newPw)
-                            .build()
-                        form
-                    }
-                    else -> {
-                        val payload = JSONObject().apply {
-                            // أسماء الحقول مرنة:
-                            put(extra.optString("adminUserField", "adminUser"), user)
-                            put(extra.optString("adminPassField", "adminPass"), pass)
-                            put(extra.optString("newPassField",  "newPass"),  newPw)
-                        }.toString()
-                        RequestBody.create("application/json; charset=utf-8".toMediaType(), payload)
-                    }
-                }
-
-                val req = Request.Builder()
+                val request: Request = Request.Builder()
                     .url(url)
-                    .method(method.uppercase(), if (method.equals("POST", true)) reqBody else null)
-                    .headers(headers.build())
+                    .get()
                     .build()
 
-                val res = client.newCall(req).execute()
-                val ok = res.isSuccessful
-                val bodyTxt = res.body?.string().orEmpty()
-
-                resp.put("ok", ok)
-                    .put("code", res.code)
-                    .put("body", if (bodyTxt.length > 500) bodyTxt.take(500) + "..." else bodyTxt)
-                    .toString()
+                client.newCall(request).execute().use { resp: Response ->
+                    val body = resp.body?.string() ?: ""
+                    JSONObject()
+                        .put("code", resp.code)
+                        .put("ok", resp.isSuccessful)
+                        .put("body", body)
+                        .toString()
+                }
             } catch (e: Exception) {
-                resp.put("message", e.message ?: "change error").toString()
+                JSONObject().put("error", e.message ?: "error").toString()
             }
         }
 
-        // === (C) جلب توكن HiLink (مبسّط) ===
-        private fun getHiLinkSesTok(host: String, port: Int): Pair<Boolean, String> {
+        // طلب POST عام (JSON) – تُمرَّر من JS (مثلاً لتغيير كلمة السر)
+        @JavascriptInterface
+        fun httpPostJson(url: String, jsonBody: String, authHeader: String?): String {
             return try {
-                val url = buildString {
-                    append("http://$host")
-                    if (port != -1) append(":$port")
-                    append("/api/webserver/SesTokInfo")
+                val media = "application/json; charset=utf-8".toMediaTypeOrNull()
+                val body = RequestBody.create(media, jsonBody)
+
+                val builder = Request.Builder()
+                    .url(url)
+                    .post(body)
+
+                if (!authHeader.isNullOrBlank()) {
+                    builder.addHeader("Authorization", authHeader)
                 }
-                val req = Request.Builder().url(url).get().build()
-                client.newCall(req).execute().use { r ->
-                    val t = r.body?.string().orEmpty()
-                    // التوكن كيتوجد داخل XML مثل:
-                    // <TokInfo>__RequestVerificationToken=xxxx</TokInfo> أو <TokInfo><Tok>xxx</Tok>...
-                    val token = Regex("<Tok>(.*?)</Tok>").find(t)?.groupValues?.get(1)
-                        ?: Regex("__RequestVerificationToken=([A-Za-z0-9]+)").find(t)?.groupValues?.get(1)
-                        ?: ""
-                    if (token.isNotEmpty()) Pair(true, token) else Pair(false, "")
+
+                val request: Request = builder.build()
+
+                client.newCall(request).execute().use { resp: Response ->
+                    val respBody = resp.body?.string() ?: ""
+                    JSONObject()
+                        .put("code", resp.code)
+                        .put("ok", resp.isSuccessful)
+                        .put("body", respBody)
+                        .toString()
                 }
             } catch (e: Exception) {
-                Pair(false, "")
+                JSONObject().put("error", e.message ?: "error").toString()
             }
+        }
+    }
+
+    override fun onBackPressed() {
+        if (this::webView.isInitialized && webView.canGoBack()) {
+            webView.goBack()
+        } else {
+            super.onBackPressed()
         }
     }
 }
