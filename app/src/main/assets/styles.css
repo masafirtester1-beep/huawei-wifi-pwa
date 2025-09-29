@@ -1,31 +1,65 @@
-// دالة لعرض رسالة فـ output
-function logMessage(msg) {
-  const output = document.getElementById("output");
-  output.innerHTML += `<p>${msg}</p>`;
+body {
+  font-family: Arial, sans-serif;
+  direction: rtl;
+  text-align: center;
+  background-color: #f4f7fb;
+  margin: 0;
+  padding: 0;
 }
 
-// فحص الاتصال
-function checkStatus() {
-  const gateway = document.getElementById("gateway").value || "192.168.8.1";
-
-  // محاكاة
-  logMessage("🔍 جاري الفحص للراوتر: " + gateway);
-  setTimeout(() => {
-    logMessage("✅ الراوتر متصل بالإنترنت.");
-  }, 1000);
+h1 {
+  background: #1976d2;
+  color: white;
+  padding: 15px;
+  margin: 0;
+  font-size: 22px;
 }
 
-// عرض الأجهزة المتصلة
-function listDevices() {
-  // محاكاة أجهزة متصلة
-  const devices = [
-    { name: "هاتف سامسونج", ip: "192.168.8.10" },
-    { name: "حاسوب محمول", ip: "192.168.8.15" },
-    { name: "هاتف آيفون", ip: "192.168.8.20" }
-  ];
+.container {
+  margin: 20px auto;
+  max-width: 400px;
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
 
-  logMessage("💻 الأجهزة المتصلة:");
-  devices.forEach(d => {
-    logMessage(`• ${d.name} — ${d.ip}`);
-  });
-  }
+label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+
+input {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+button {
+  width: 48%;
+  padding: 10px;
+  margin: 5px 1%;
+  border: none;
+  border-radius: 5px;
+  color: white;
+  background-color: #1976d2;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #1565c0;
+}
+
+#output {
+  margin-top: 20px;
+  text-align: left;
+  font-size: 14px;
+  background: #eee;
+  padding: 10px;
+  border-radius: 5px;
+  direction: ltr;
+}
