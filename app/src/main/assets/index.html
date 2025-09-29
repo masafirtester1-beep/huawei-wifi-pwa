@@ -1,49 +1,56 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="utf-8">
   <title>Huawei Wi-Fi Helper</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header>
-    <h1>Huawei WiFi Helper📶</h1>
-  </header>
+  <header><h1>Huawei Wi-Fi Helper</h1></header>
 
-  <main>
+  <main class="container">
+    <!-- بوابة الراوتر -->
     <section class="card">
-      <label>عنوان الراوتر (Gateway)</label>
+      <label for="gateway">عنوان الراوتر (Gateway)</label>
       <input id="gateway" placeholder="مثال: 192.168.8.1" value="192.168.8.1">
-
-      <div class="buttons">
-        <button id="checkBtn">فحص الإتصال 🔍</button>
+      <div class="row">
+        <button id="checkBtn">فحص الاتصال 🔍</button>
         <button id="devicesBtn">عرض الأجهزة 💻</button>
       </div>
+      <p id="routerInfo" class="muted">—</p>
+    </section>
 
-      <div class="info">
-        <p><strong>معلومات الراوتر:</strong> <span id="routerInfo">—</span></p>
-        <p><strong>مستوى الإشارة (RSSI):</strong> <span id="rssi">غير متاح</span></p>
-        <p><strong>SSID:</strong> <span id="ssid">—</span></p>
-      </div>
+    <!-- معلومات الواي-فاي من التطبيق -->
+    <section class="card">
+      <h3>معلومات الشبكة</h3>
+      <p>SSID: <strong id="ssid">—</strong></p>
+      <p>RSSI: <strong id="rssi">—</strong></p>
+      <button id="permBtn" type="button">طلب/تحديث الصلاحيات</button>
+    </section>
 
-      <hr>
-
+    <!-- بيانات المدير + تغيير كلمة السر -->
+    <section class="card">
       <h3>تغيير كلمة مرور الواي-فاي</h3>
-      <label for="newPass">كلمة المرور الجديدة</label>
-      <input id="newPass" placeholder="أدخل كلمة السر الجديدة">
 
-      <label for="adminUser">اسم مستخدم المدير</label>
+      <label for="adminUser">اسم المستخدم (Admin)</label>
       <input id="adminUser" placeholder="admin">
 
-      <label for="adminPass">كلمة مرور المدير</label>
-      <input id="adminPass" placeholder="admin password" type="password">
+      <label for="adminPass">كلمة السر (Admin)</label>
+      <input id="adminPass" type="password" placeholder="••••••••">
 
-      <button id="changePassBtn">تغيير كلمة السر</button>
-      <p id="changeResult"></p>
+      <label for="newPass">كلمة السر الجديدة للشبكة</label>
+      <input id="newPass" type="text" placeholder="كلمة سر جديدة قوية">
+
+      <div class="row">
+        <button id="saveCredsBtn" type="button">حفظ بيانات المدير 💾</button>
+        <button id="changePassBtn" type="button">تغيير كلمة السر 🔐</button>
+      </div>
+
+      <p id="changeResult" class="muted">—</p>
     </section>
   </main>
 
   <script src="app.js"></script>
 </body>
-</html>
+  </html>
