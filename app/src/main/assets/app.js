@@ -1,103 +1,131 @@
-// app.js
-
 document.addEventListener('DOMContentLoaded', () => {
-  const gatewayInput = document.getElementById('gateway');
-  const checkBtn = document.getElementById('checkBtn');
-  const devicesBtn = document.getElementById('devicesBtn');
-  const routerInfo = document.getElementById('routerInfo');
-  const rssiSpan = document.getElementById('rssi');
-  const ssidSpan = document.getElementById('ssid');
-  const changeBtn = document.getElementById('changePassBtn');
-  const changeResult = document.getElementById('changeResult');
+  const $ = (id) => document.getElementById(id);
 
+  const gatewayInput = $('gateway');
+  const checkBtn = $('checkBtn');
+  const devicesBtn = $('devicesBtn');
+  const routerInfo = $('routerInfo');
+  const rssiSpan = $('rssi');
+  const ssidSpan = $('ssid');
+  const changeBtn = $('changePassBtn');
+  const changeResult = $('changeResult');
+  const permBtn = $('permBtn'); // (اختياري) زر طلب الصلاحيات إن كان موجود
+
+  // ========= اتصال الراوتر (اختباري فقط من المتصفح) =========
   async function tryFetchGateway() {
-    const gw = gatewayInput.value.trim();
-    if (!gw) return routerInfo.textContent = 'ضع عنوان الراوتر أولا';
-
+    const gw = (gatewayInput.value || '').trim();
+    if (!gw) {
+      routerInfo.textContent = 'ضع عنوان الراوتر أولا';
+      return;
+    }
     routerInfo.textContent = 'جارٍ الاتصال...';
     try {
-      // محاولة بسيطة لقراءة صفحة الراوتر
-      const res = await fetch(`http://${gw}/`, { mode: 'no-cors' });
-      // ملاحظة: مع كثير من الراوترات، fetch مع no-cors لن يقدّم تفاصيل (opaque)
-      // سنعرض نجاح/فشل بناءً على الوصول فقط:
-      routerInfo.textContent = 'تم الاتصال (قد يكون الجواب مخفياً بسبب CORS).';
+      await fetch(`http://${gw}/`, { mode: 'no-cors' });
+      routerInfo.textContent = 'تم الوصول (قد لا تظهر الاستجابة بسبب CORS).';
     } catch (err) {
       routerInfo.textContent = 'خطأ في الاتصال: ' + err.message;
     }
   }
+  checkBtn?.addEventListener('click', tryFetchGateway);
 
-  checkBtn.addEventListener('click', tryFetchGateway);
-
-  devicesBtn.addEventListener('click', async () => {
-    // محاولة بسيطة: قد يكون الراوتر عنده صفحة أجهزة (مثال) — هذا مجرد مثال عامّي
-    const gw = gatewayInput.value.trim();
-    if (!gw) return routerInfo.textContent = 'أدخل عنوان الراوتر أولاً';
+  devicesBtn?.addEventListener('click', async () => {
+    const gw = (gatewayInput.value || '').trim();
+    if (!gw) return (routerInfo.textContent = 'أدخل عنوان الراوتر أولاً');
     try {
-      const res = await fetch(`http://${gw}/device_list`, { mode: 'no-cors' });
-      routerInfo.textContent = 'تم طلب قائمة الأجهزة — قد تحتاج تعديل المسار حسب الراوتر.';
+      await fetch(`http://${gw}/device_list`, { mode: 'no-cors' });
+      routerInfo.textContent = 'طُلِبت قائمة الأجهزة — قد تحتاج تعديل المسار حسب الراوتر.';
     } catch (e) {
       routerInfo.textContent = 'فشل طلب الأجهزة — ' + e.message;
     }
   });
 
-  // --- RSSI & SSID retrieval (via Android WebView interface) ---
-  function updateNativeWifiInfo() {
-    // If running inside Android WebView and JavaScript interface added as "Android"
+  // ========= SSID / RSSI من واجهة أندرويد =========
+  function formatSsid(raw) {
+    if (!raw) return 'غير متصل';
+    // بعض الأجهزة ترجّع "SSID" بعلامات اقتباس
+    if (raw.startsWith('"') && raw.endsWith('"')) {
+      return raw.slice(1, -1);
+    }
+    return raw;
+  }
+
+  function formatRssi(val) {
+    if (typeof val !== 'number') return 'غير معروف';
+    return `${val} dBm`;
+  }
+
+  function updateNativeWifiInfo(showFallback = true) {
     if (window.Android && typeof window.Android.getWifiInfo === 'function') {
       try {
-        const json = window.Android.getWifiInfo(); // should return JSON string
-        const info = JSON.parse(json);
-        rssiSpan.textContent = info.rssi ?? 'N/A';
-        ssidSpan.textContent = info.ssid ?? 'N/A';
+        const info = JSON.parse(window.Android.getWifiInfo());
+
+        ssidSpan.textContent = formatSsid(info.ssid);
+        rssiSpan.textContent = formatRssi(info.rssi);
+
+        if (info.error) {
+          console.log('Wifi error:', info.error);
+        }
+        return;
       } catch (e) {
+        console.log('Parse error:', e);
+        ssidSpan.textContent = 'خطأ قراءة المعلومات';
         rssiSpan.textContent = 'خطأ قراءة المعلومات';
+        return;
       }
-    } else {
-      rssiSpan.textContent = 'غير متاح — ليس داخل WebView أو لم تُفعّل الواجهة';
-      ssidSpan.textContent = 'غير متاح';
+    }
+
+    // خارج WebView (اختبار على المتصفح)
+    if (showFallback) {
+      ssidSpan.textContent = 'غير متاح (خارج WebView)';
+      rssiSpan.textContent = 'غير متاح';
     }
   }
 
-  // استدعاء على التحميل
-  updateNativeWifiInfo();
+  // طلب صلاحيات من التطبيق (اختياري)
+  function requestPermissions() {
+    if (window.Android && typeof window.Android.requestPermissions === 'function') {
+      window.Android.requestPermissions();
+    } else {
+      alert('متاح فقط داخل التطبيق.');
+    }
+  }
+  permBtn?.addEventListener('click', requestPermissions);
 
-  // تغيير كلمة السر — مثال عامّي: نرسل POST إلى endpoint (خاص بالراوتر)
-  changeBtn.addEventListener('click', async () => {
-    const gw = gatewayInput.value.trim();
-    const newPass = document.getElementById('newPass').value;
-    const adminUser = document.getElementById('adminUser').value;
-    const adminPass = document.getElementById('adminPass').value;
+  // تحديث فوري ثم دوري
+  updateNativeWifiInfo();
+  let wifiTimer = setInterval(updateNativeWifiInfo, 5000);
+
+  // إن بغيت توقف التحديث الدوري من JS آخر: clearInterval(wifiTimer);
+
+  // ========= تغيير كلمة سر الواي فاي (مسار افتراضي – عدّل حسب الراوتر) =========
+  changeBtn?.addEventListener('click', async () => {
+    const gw = (gatewayInput.value || '').trim();
+    const newPass = ($('newPass')?.value || '').trim();
+    const adminUser = ($('adminUser')?.value || '').trim();
+    const adminPass = ($('adminPass')?.value || '').trim();
 
     if (!gw || !newPass || !adminUser) {
-      changeResult.textContent = 'عمر جميع الحقول المطلوبة';
+      changeResult.textContent = 'عَمِّر جميع الحقول المطلوبة';
       return;
     }
 
     changeResult.textContent = 'جارٍ إرسال الطلب...';
 
-    // **ملاحظة مهمة**: المسار /api/change_password مجرد مثال. خاصك تعرف API الراوتر الحقيقي.
-    const endpoint = `http://${gw}/api/change_password`;
+    const endpoint = `http://${gw}/api/change_password`; // عدّل حسب API الراوتر
 
     try {
-      const res = await fetch(endpoint, {
+      await fetch(endpoint, {
         method: 'POST',
-        // قد يحتاج headers مخصصة أو body (form) حسب الراوتر
-        headers: {
-          'Content-Type': 'application/json',
-          // يمكن إضافة Authorization header إن لزم
-        },
-        body: JSON.stringify({
-          adminUser,
-          adminPass,
-          newPass
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminUser, adminPass, newPass }),
         credentials: 'include',
-        mode: 'no-cors' // غالبا سيفشل إن لم تكن واجهة الراوتر تدعم CORS
+        mode: 'no-cors'
       });
-      changeResult.textContent = 'تم إرسال الطلب. راجع صفحة الراوتر للتأكد (CORS ممكن يمنع الاستجابة من الويب).';
+      changeResult.textContent =
+        'تم إرسال الطلب. إذا ما بان جواب، راه CORS ممكن حاجبو — تأكد مباشرة من صفحة الراوتر.';
     } catch (err) {
       changeResult.textContent = 'خطأ أثناء الإرسال: ' + err.message;
     }
   });
 
-}); // DOMContentLoaded
+});
