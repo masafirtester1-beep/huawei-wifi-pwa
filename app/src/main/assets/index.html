@@ -1,48 +1,44 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Huawei WiFi Helper</title>
-  <link rel="stylesheet" href="styles.css">
-  <script src="app.js" defer></script>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <h2>Huawei WiFi Helper</h2>
+  <h2>معلومات الشبكة</h2>
+  <p><b>SSID:</b> <span id="ssid">غير متاح</span></p>
+  <p><b>RSSI:</b> <span id="rssi">غير متاح</span></p>
 
-  <button onclick="checkConnection()">🔍 فحص الاتصال</button>
-  <button onclick="getDevices()">💻 عرض الأجهزة</button>
+  <button id="permBtn">طلب/تحديث الصلاحيات</button>
 
-  <p id="devicesMsg">طلبت قائمة الأجهزة – قد تحتاج تعديل المسار حسب الراوتر.</p>
+  <!-- باقي الواجهة… -->
 
-  <h3>معلومات الشبكة</h3>
-  <p><strong>SSID:</strong> <span id="ssid">غير متاح</span></p>
-  <p><strong>RSSI:</strong> <span id="rssi">غير متاح</span></p>
-  <button onclick="requestPermissions()">طلب/تحديث الصلاحيات</button>
-
-  <h3>تغيير كلمة مرور الواي-فاي</h3>
-  <label>اسم المستخدم (Admin)</label>
-  <input type="text" id="adminUser">
-  <label>كلمة السر (Admin)</label>
-  <input type="password" id="adminPass">
-  <label>كلمة السر الجديدة للشبكة</label>
-  <input type="text" id="newWifiPass">
-
-  <button onclick="saveCreds()">💾 حفظ بيانات المدير</button>
-  <button onclick="changePassword()">🔐 تغيير كلمة السر</button>
-
-  <p id="statusMsg"></p>
-</body>
-  
-<script>
-  window.onPermissionsUpdated = function(granted){
-    // حدّث الواجهة حسب النتيجة
-    // مثلا: أعد قراءة معلومات الشبكة
-    if (granted) {
-      const info = JSON.parse(Android.getWifiInfo());
-      document.getElementById('ssid').textContent = info.ssid;
-      document.getElementById('rssi').textContent = info.rssi;
-    } else {
-      alert('صلاحيات الموقع مرفوضة. فعّلها لعرض SSID.');
+  <script src="app.js"></script>
+  <script>
+    // يُستدعى من الأندرويد بعد تحميل الصفحة
+    function startAuto() {
+      if (window.AppAutoStarted) return; // لا نكرر
+      window.AppAutoStarted = true;
+      window.App.startAutoRefresh();     // من app.js
     }
-  };
-</script>
+
+    // حتى لو الأندرويد ما ناداش، نبدأ نحن بعد DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', () => {
+      startAuto();
+    });
+
+    // كولباك يستدعيه الأندرويد بعد نتيجة طلب الصلاحيات
+    window.onPermissionsUpdated = function(granted) {
+      // مباشرة نحدّث القراءة
+      if (window.App) window.App.readOnce();
+    };
+
+    // زر يدوي إذا بغيتي
+    document.getElementById('permBtn').addEventListener('click', () => {
+      if (window.Android && Android.askPermissions) Android.askPermissions();
+    });
+  </script>
+</body>
+</html>
