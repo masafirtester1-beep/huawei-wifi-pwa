@@ -19,6 +19,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import org.json.JSONObject
+import android.net.wifi.WifiManager
 
 class MainActivity : AppCompatActivity() {
 
@@ -112,11 +113,7 @@ class MainActivity : AppCompatActivity() {
                     json.put("ssid", cleaned)
                 }
 
-                if (rssi == null || rssi == WifiInfo.INVALID_RSSI) {
-                    json.put("rssi", JSONObject.NULL)
-                } else {
-                    json.put("rssi", rssi)
-                }
+                
 
                 // معطيات إضافية
                 json.put("locationEnabled", isLocationEnabled())
