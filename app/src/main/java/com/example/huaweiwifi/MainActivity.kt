@@ -1,39 +1,42 @@
-
 package com.example.huaweiwifi
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
+import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
+import android.provider.Settings
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-
-// ✅ OkHttp (حلّ الخطأ)
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody
-import okhttp3.Response
-import java.util.concurrent.TimeUnit
 import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
-    private val client: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
-            .build()
+
+    // Activity Result API لطلب الصلاحيات
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        // نبعتو تحديث للـ JS بعد ما يسالي الطلب
+        val granted = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                results[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+
+        runOnUiThread {
+            webView.evaluateJavascript(
+                "window.onPermissionsUpdated && window.onPermissionsUpdated(${granted});",
+                null
+            )
+        }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -46,140 +49,87 @@ class MainActivity : AppCompatActivity() {
         with(webView.settings) {
             javaScriptEnabled = true
             domStorageEnabled = true
-            cacheMode = WebSettings.LOAD_DEFAULT
-            builtInZoomControls = false
-            displayZoomControls = false
-            allowFileAccessFromFileURLs = true
-            allowUniversalAccessFromFileURLs = true
-            mediaPlaybackRequiresUserGesture = false
+            // للسماح بتحميل http من الراوتر
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            }
         }
-
-        webView.webViewClient = object : WebViewClient() {}
+        webView.webViewClient = WebViewClient()
         webView.webChromeClient = WebChromeClient()
 
-        // واجهة JS ليتواصل معها app.js
-        webView.addJavascriptInterface(AppBridge(this), "Android")
+        // نضيف جسر JS
+        webView.addJavascriptInterface(JsBridge(this), "Android")
 
-        // حمّل الواجهة من مجلد الأصول
+        // حمّل صفحة الواجهة من الأصول
         webView.loadUrl("file:///android_asset/index.html")
     }
 
-    inner class AppBridge(private val ctx: Context) {
+    inner class JsBridge(private val ctx: Context) {
 
-        // تزويد الجافاسكريبت بمعلومات SSID/RSSI إن توفرت
+        /** يناديه JS باش يطلب/يحدّث الصلاحيات. */
+        @JavascriptInterface
+        fun askPermissions(): String {
+            // إذا الموقع طافي، نقترحو على المستخدم يفتحو
+            if (!isLocationEnabled(ctx)) {
+                startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            }
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+            return "requested"
+        }
+
+        /** يرجّع JSON فيه ssid و rssi. */
         @JavascriptInterface
         fun getWifiInfo(): String {
-            val result = JSONObject()
+            val js = JSONObject()
+            val (ssid, rssi) = readWifiInfo(ctx)
+            js.put("ssid", ssid ?: "N/A")
+            js.put("rssi", rssi ?: "N/A")
+            return js.toString()
+        }
+    }
+
+    // -------- Utilities --------
+
+    private fun isLocationEnabled(context: Context): Boolean {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            lm.isLocationEnabled
+        } else {
             try {
-                val wifiManager =
-                    ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-
-                @Suppress("DEPRECATION")
-                val info = wifiManager.connectionInfo
-
-                // ملاحظة: على أندرويد 8+ قد تحتاج صلاحيات الموقع كي يظهر الـ SSID
-                val ssid: String? =
-                    if (info != null && info.ssid != WifiManager.UNKNOWN_SSID) {
-                        info.ssid?.replace("\"", "")
-                    } else {
-                        null
-                    }
-
-                val rssi: Int? = info?.rssi
-
-                result.put("ssid", ssid ?: "غير متاح")
-                result.put("rssi", rssi ?: JSONObject.NULL)
-            } catch (e: Exception) {
-                result.put("ssid", "خطأ")
-                result.put("rssi", JSONObject.NULL)
-            }
-            return result.toString()
+                Settings.Secure.getInt(context.contentResolver, Settings.Secure.LOCATION_MODE) !=
+                        Settings.Secure.LOCATION_MODE_OFF
+            } catch (_: Exception) { false }
         }
+    }
 
-        // حفظ بيانات الأدمن محلياً (SharedPreferences)
-        @JavascriptInterface
-        fun saveAdmin(user: String, pass: String) {
-            val sp = ctx.getSharedPreferences("admin_store", Context.MODE_PRIVATE)
-            sp.edit().putString("user", user).putString("pass", pass).apply()
+    @SuppressLint("MissingPermission")
+    private fun readWifiInfo(context: Context): Pair<String?, Int?> {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+
+        // تأكد أننا فعلاً على واي-فاي
+        val nc = cm.getNetworkCapabilities(cm.activeNetwork)
+        val onWifi = nc?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        if (!onWifi) return Pair(null, null)
+
+        // connectionInfo مازال مفيد وكيخدم لمعظم الأجهزة
+        val info = wm.connectionInfo
+        var ssid = info?.ssid
+        val rssi = info?.rssi
+
+        // بعض الأجهزة كترجع ssid بين علامات اقتباس
+        if (!ssid.isNullOrEmpty() && ssid.startsWith("\"") && ssid.endsWith("\"")) {
+            ssid = ssid.substring(1, ssid.length - 1)
         }
+        // Android 8+ بدون صلاحيات/لوكيشن طافي ➜ غالباً "<unknown ssid>"
+        if (ssid.equals("<unknown ssid>", ignoreCase = true)) ssid = null
 
-        @JavascriptInterface
-        fun getAdminUser(): String {
-            val sp = ctx.getSharedPreferences("admin_store", Context.MODE_PRIVATE)
-            return sp.getString("user", "admin") ?: "admin"
-        }
-
-        @JavascriptInterface
-        fun getAdminPass(): String {
-            val sp = ctx.getSharedPreferences("admin_store", Context.MODE_PRIVATE)
-            return sp.getString("pass", "") ?: ""
-        }
-
-        // فحص إن كان الاتصال الحالي عبر Wi-Fi
-        @JavascriptInterface
-        fun isWifiConnected(): Boolean {
-            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val network = cm.activeNetwork ?: return false
-                val caps = cm.getNetworkCapabilities(network) ?: return false
-                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-            } else {
-                @Suppress("DEPRECATION")
-                cm.activeNetworkInfo?.type == ConnectivityManager.TYPE_WIFI
-            }
-        }
-
-        // طلب GET عام (للراوتر مثلاً)
-        @JavascriptInterface
-        fun httpGet(url: String): String {
-            return try {
-                val request: Request = Request.Builder()
-                    .url(url)
-                    .get()
-                    .build()
-
-                client.newCall(request).execute().use { resp: Response ->
-                    val body = resp.body?.string() ?: ""
-                    JSONObject()
-                        .put("code", resp.code)
-                        .put("ok", resp.isSuccessful)
-                        .put("body", body)
-                        .toString()
-                }
-            } catch (e: Exception) {
-                JSONObject().put("error", e.message ?: "error").toString()
-            }
-        }
-
-        // طلب POST عام (JSON) – تُمرَّر من JS (مثلاً لتغيير كلمة السر)
-        @JavascriptInterface
-        fun httpPostJson(url: String, jsonBody: String, authHeader: String?): String {
-            return try {
-                val media = "application/json; charset=utf-8".toMediaTypeOrNull()
-                val body = RequestBody.create(media, jsonBody)
-
-                val builder = Request.Builder()
-                    .url(url)
-                    .post(body)
-
-                if (!authHeader.isNullOrBlank()) {
-                    builder.addHeader("Authorization", authHeader)
-                }
-
-                val request: Request = builder.build()
-
-                client.newCall(request).execute().use { resp: Response ->
-                    val respBody = resp.body?.string() ?: ""
-                    JSONObject()
-                        .put("code", resp.code)
-                        .put("ok", resp.isSuccessful)
-                        .put("body", respBody)
-                        .toString()
-                }
-            } catch (e: Exception) {
-                JSONObject().put("error", e.message ?: "error").toString()
-            }
-        }
+        return Pair(ssid, rssi)
     }
 
     override fun onBackPressed() {
