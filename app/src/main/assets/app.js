@@ -1,54 +1,129 @@
+document.addEventListener('DOMContentLoaded', () => {
+  const gatewayInput = document.getElementById('gateway');
+  const checkBtn = document.getElementById('checkBtn');
+  const devicesBtn = document.getElementById('devicesBtn');
+  const routerInfo = document.getElementById('routerInfo');
+  const rssiSpan = document.getElementById('rssi');
+  const ssidSpan = document.getElementById('ssid');
+  const changeBtn = document.getElementById('changePassBtn');
+  const changeResult = document.getElementById('changeResult');
+  const saveAdminBtn = document.getElementById('saveAdminBtn');
 
-window.App = (function () {
-  const ssidEl = document.getElementById('ssid');
-  const rssiEl = document.getElementById('rssi');
+  // حفظ بيانات المدير محلياً (localStorage)
+  saveAdminBtn.addEventListener('click', () => {
+    const adminUser = document.getElementById('adminUser').value;
+    const adminPass = document.getElementById('adminPass').value;
+    localStorage.setItem('adminUser', adminUser);
+    localStorage.setItem('adminPass', adminPass);
+    changeResult.textContent = 'تم حفظ بيانات المدير محلياً';
+  });
 
-  let timer = null;
+  // استرجاع المحفوظ إذا متوفر
+  const savedUser = localStorage.getItem('adminUser');
+  const savedPass = localStorage.getItem('adminPass');
+  if (savedUser) document.getElementById('adminUser').value = savedUser;
+  if (savedPass) document.getElementById('adminPass').value = savedPass;
 
-  function setInfo(ssid, rssi) {
-    ssidEl.textContent = ssid ?? 'غير متاح';
-    rssiEl.textContent = (rssi ?? 'غير متاح');
-  }
+  async function tryFetchGateway() {
+    const gw = gatewayInput.value.trim();
+    if (!gw) return routerInfo.textContent = 'ضع عنوان الراوتر أولا';
 
-  function readOnce() {
+    routerInfo.textContent = 'جارٍ الاتصال...';
     try {
-      if (window.Android && typeof Android.getWifiInfo === 'function') {
-        const info = JSON.parse(Android.getWifiInfo());
-        setInfo(info.ssid, info.rssi);
-
-        const missing = !info.ssid || info.ssid === 'N/A' ||
-                        !info.rssi || info.rssi === 'N/A';
-        // إذا ناقص صلاحيات/الموقع طافي، نطلب الصلاحيات تلقائياً
-        if (missing && window.Android && Android.askPermissions) {
-          Android.askPermissions();
-        }
-      } else {
-        setInfo('خارج WebView', 'خارج WebView');
-      }
-    } catch (e) {
-      setInfo('خطأ', 'خطأ');
-      console.log('readOnce error:', e);
+      // تجربة طلب إلى الصفحة الرئيسية — mode no-cors قد يمنع قراءة المحتوى، لكن سنعلم بنجاح الوصول
+      const res = await fetch(`http://${gw}/`, { mode: 'no-cors', credentials: 'include' });
+      routerInfo.textContent = 'تم الاتصال (قد يكون الجواب مخفياً بسبب CORS).';
+    } catch (err) {
+      routerInfo.textContent = 'خطأ في الاتصال: ' + err.message;
     }
   }
 
-  function startAutoRefresh() {
-    // قراءة فورية
-    readOnce();
-    // ونعيد كل ثانيتين حتى تظهر قيم حقيقية
-    if (timer) clearInterval(timer);
-    timer = setInterval(() => {
-      // إذا ظهر SSID حقيقي و RSSI، ممكن توقف المؤقت
-      const done = ssidEl.textContent !== 'غير متاح' &&
-                   ssidEl.textContent !== 'N/A' &&
-                   rssiEl.textContent !== 'غير متاح' &&
-                   rssiEl.textContent !== 'N/A';
-      if (!done) readOnce();
-      // لو تحب تخلّيه دائمًا يحدث، علّق الشرط أعلاه
-    }, 2000);
+  checkBtn.addEventListener('click', tryFetchGateway);
+
+  devicesBtn.addEventListener('click', async () => {
+    const gw = gatewayInput.value.trim();
+    if (!gw) return routerInfo.textContent = 'أدخل عنوان الراوتر أولاً';
+    // مثال لمسار قد يختلف حسب الراوتر
+    const endpoint = `http://${gw}/api/device_list`;
+    try {
+      const res = await fetch(endpoint, { mode:'no-cors', credentials: 'include' });
+      routerInfo.textContent = 'تم طلب قائمة الأجهزة — قد تحتاج تعديل المسار حسب الراوتر.';
+    } catch (e) {
+      routerInfo.textContent = 'فشل طلب الأجهزة — ' + e.message;
+    }
+  });
+
+  // --- RSSI & SSID retrieval (via Android WebView interface) ---
+  function updateNativeWifiInfo() {
+    if (window.Android && typeof window.Android.getWifiInfo === 'function') {
+      try {
+        const json = window.Android.getWifiInfo(); // JSON string
+        const info = JSON.parse(json);
+        if (info.ok) {
+          const ssid = info.ssid && info.ssid !== "null" ? info.ssid : 'غير متاح';
+          const rssi = (info.rssi && info.rssi !== null) ? (info.rssi + ' dBm') : 'غير متاح';
+          ssidSpan.textContent = ssid;
+          rssiSpan.textContent = rssi;
+          routerInfo.textContent = '';
+          // إذا location غير مفعّل نعرض تعليمات
+          if (info.locationEnabled === false) {
+            routerInfo.textContent = 'خاصك تفعّل الموقع باش يظهر SSID على بعض الأجهزة. اضغط هنا لفتح الإعدادات.';
+            routerInfo.style.textDecoration = 'underline';
+            routerInfo.onclick = () => {
+              if (window.Android && window.Android.requestOpenLocationSettings) {
+                window.Android.requestOpenLocationSettings();
+              }
+            };
+          }
+        } else {
+          ssidSpan.textContent = 'خطأ';
+          rssiSpan.textContent = 'خطأ';
+          routerInfo.textContent = 'خطأ في جلب معلومات الـ WiFi: ' + (info.error || '');
+        }
+      } catch (e) {
+        ssidSpan.textContent = 'خطأ قراءة المعلومات';
+        rssiSpan.textContent = 'خطأ';
+        routerInfo.textContent = 'خطأ: ' + e.message;
+      }
+    } else {
+      ssidSpan.textContent = 'غير متاح';
+      rssiSpan.textContent = 'غير متاح';
+      routerInfo.textContent = 'الميزة Native غير متاحة (ليس داخل WebView أو لم تُفعّل الواجهة)';
+    }
   }
 
-  return {
-    startAutoRefresh,
-    readOnce
-  };
-})();
+  // استدعاء على التحميل
+  updateNativeWifiInfo();
+
+  // تغيير كلمة السر — مثال عامّي: مسار إفتراضي
+  changeBtn.addEventListener('click', async () => {
+    const gw = gatewayInput.value.trim();
+    const newPass = document.getElementById('newPass').value;
+    const adminUser = document.getElementById('adminUser').value;
+    const adminPass = document.getElementById('adminPass').value;
+
+    if (!gw || !newPass || !adminUser) {
+      changeResult.textContent = 'عمر جميع الحقول المطلوبة';
+      return;
+    }
+
+    changeResult.textContent = 'جارٍ إرسال الطلب...';
+
+    const endpoint = `http://${gw}/api/change_password`; // **غير هذا للمسار الصحيح**
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ adminUser, adminPass, newPass }),
+        credentials: 'include',
+        mode: 'no-cors'
+      });
+      changeResult.textContent = 'تم إرسال الطلب. راجع صفحة الراوتر للتأكد (CORS قد يمنع قراءة الاستجابة).';
+    } catch (err) {
+      changeResult.textContent = 'خطأ أثناء الإرسال: ' + err.message;
+    }
+  });
+
+});
