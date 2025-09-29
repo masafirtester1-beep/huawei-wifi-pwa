@@ -112,7 +112,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // RSSI
-                if (rssi == null || rssi == WifiInfo.INVALID_RSSI) {
+                if (rssi == null || rssi == WifiManager.INVALID_RSSI) {
                     json.put("rssi", JSONObject.NULL)
                 } else {
                     json.put("rssi", rssi)
