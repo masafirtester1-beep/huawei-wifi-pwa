@@ -32,7 +32,7 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             add(Manifest.permission.NEARBY_WIFI_DEVICES)
         }
-    }.toTypedArray()
+    }
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
@@ -41,10 +41,10 @@ class MainActivity : AppCompatActivity() {
                 if (!v) granted = false
             }
             if (!granted) {
-                Toast.makeText(this, "Permissions required for SSID/RSSI", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "⚠️ Permissions denied", Toast.LENGTH_LONG).show()
             } else {
-                // حدّث المعلومات مباشرة بعد منح الصلاحيات
-                webView.evaluateJavascript("updateNativeWifiInfo()", null)
+                // reload لتحديث معلومات الواي فاي
+                webView.evaluateJavascript("updateWifiInfo()", null)
             }
         }
 
@@ -61,18 +61,15 @@ class MainActivity : AppCompatActivity() {
         wsettings.domStorageEnabled = true
         webView.webViewClient = WebViewClient()
         webView.webChromeClient = WebChromeClient()
+        webView.addJavascriptInterface(WebAppInterface(this), "Android")
 
-        // واجهة JS → أندرويد
-        webView.addJavascriptInterface(WebAppInterface(), "Android")
-
-        // طلب الأذونات
+        // طلب الصلاحيات
         checkAndRequestPermissions()
 
-        // حمّل صفحة الويب المرفقة داخل assets/www/index.html
+        // تحميل الصفحة المحلية
         webView.loadUrl("file:///android_asset/index.html")
     }
 
-    // طلب الأذونات اللي ناقصة فقط
     private fun checkAndRequestPermissions() {
         val toRequest = mutableListOf<String>()
         for (p in requiredPermissions) {
@@ -85,10 +82,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** واجهة متاحة لصفحة الويب */
-    inner class WebAppInterface {
-
-        /** إرجاع JSON فيه ssid/rssi وحالة الموقع */
+    inner class WebAppInterface(private val ctx: Context) {
         @JavascriptInterface
         fun getWifiInfo(): String {
             val json = JSONObject()
@@ -99,8 +93,8 @@ class MainActivity : AppCompatActivity() {
                 var ssid: String? = null
                 var rssi: Int? = null
                 if (info != null) {
-                    rssi = info.rssi                 // قد تكون INVALID_RSSI إذا غير متاح
-                    ssid = info.ssid                 // "<unknown ssid>" إذا الموقع مطفّي
+                    rssi = info.rssi
+                    ssid = info.ssid
                 }
 
                 // تنظيف SSID
@@ -127,7 +121,6 @@ class MainActivity : AppCompatActivity() {
             return json.toString()
         }
 
-        /** افتح إعدادات الموقع للمستخدم */
         @JavascriptInterface
         fun requestOpenLocationSettings() {
             val i = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
@@ -136,17 +129,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** هل الموقع شغّال في الجهاز؟ */
     private fun isLocationEnabled(): Boolean {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 val lm = applicationContext.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
                 lm.isLocationEnabled
             } else {
-                val mode = Settings.Secure.getInt(contentResolver, Settings.Secure.LOCATION_MODE, Settings.Secure.LOCATION_MODE_OFF)
-                mode != Settings.Secure.LOCATION_MODE_OFF
+                android.provider.Settings.Secure.getInt(
+                    applicationContext.contentResolver,
+                    android.provider.Settings.Secure.LOCATION_MODE
+                ) != android.provider.Settings.Secure.LOCATION_MODE_OFF
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             false
         }
     }
