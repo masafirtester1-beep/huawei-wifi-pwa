@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -23,7 +24,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
 
-    // لائحة الأذونات (Android 13+ فيها إذن إضافي للوايفاي القريب)
+    // لائحة الأذونات (Android 13+ فيها إذن إضافي للواي فاي القريب)
     private val requiredPermissions = buildList {
         add(Manifest.permission.ACCESS_FINE_LOCATION)
         add(Manifest.permission.ACCESS_WIFI_STATE)
@@ -31,57 +32,33 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             add(Manifest.permission.NEARBY_WIFI_DEVICES)
         }
-    }
+    }.toTypedArray()
 
-    private val requestPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
-            var granted = true
-            for ((_, v) in results) {
-                if (!v) granted = false
-            }
-            if (!granted) {
-                Toast.makeText(this, "⚠️ Permissions denied", Toast.LENGTH_LONG).show()
-            } else {
-                // reload لتحديث معلومات الواي فاي
-                webView.evaluateJavascript("updateWifiInfo()", null)
-            }
-        }
-
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         webView = WebView(this)
-        setContentView(webView)
 
-        // إعدادات WebView
-        val wsettings = webView.settings
-        wsettings.javaScriptEnabled = true
-        wsettings.domStorageEnabled = true
-        webView.webViewClient = WebViewClient()
-        webView.webChromeClient = WebChromeClient()
+        // تفعيل الجافاسكريبت
+        webView.settings.javaScriptEnabled = true
+        webView.settings.domStorageEnabled = true
+
+        // إضافة واجهة جافاسكريبت
         webView.addJavascriptInterface(WebAppInterface(this), "Android")
 
-        // طلب الصلاحيات
-        checkAndRequestPermissions()
+        webView.webViewClient = WebViewClient()
+        webView.webChromeClient = WebChromeClient()
 
-        // تحميل الصفحة المحلية
+        setContentView(webView)
+
+        // تحميل صفحة من assets
         webView.loadUrl("file:///android_asset/index.html")
+
+        // طلب الأذونات
+        ActivityCompat.requestPermissions(this, requiredPermissions, 1)
     }
 
-    private fun checkAndRequestPermissions() {
-        val toRequest = mutableListOf<String>()
-        for (p in requiredPermissions) {
-            if (ActivityCompat.checkSelfPermission(this, p) != PackageManager.PERMISSION_GRANTED) {
-                toRequest.add(p)
-            }
-        }
-        if (toRequest.isNotEmpty()) {
-            requestPermissionLauncher.launch(toRequest.toTypedArray())
-        }
-    }
+    inner class WebAppInterface(private val context: Context) {
 
-    inner class WebAppInterface(private val ctx: Context) {
         @JavascriptInterface
         fun getWifiInfo(): String {
             val json = JSONObject()
@@ -91,9 +68,10 @@ class MainActivity : AppCompatActivity() {
 
                 var ssid: String? = null
                 var rssi: Int? = null
+
                 if (info != null) {
-                    rssi = info.rssi
                     ssid = info.ssid
+                    rssi = info.rssi
                 }
 
                 // تنظيف SSID
@@ -104,13 +82,14 @@ class MainActivity : AppCompatActivity() {
                     json.put("ssid", cleaned)
                 }
 
-                // RSSI
+                // التحقق من RSSI
                 if (rssi == null || rssi == android.net.wifi.WifiManager.INVALID_RSSI) {
-    json.put("rssi", JSONObject.NULL)
-} else {
-    json.put("rssi", rssi)
-}
+                    json.put("rssi", JSONObject.NULL)
+                } else {
+                    json.put("rssi", rssi)
+                }
 
+                // حالة تفعيل الموقع
                 json.put("locationEnabled", isLocationEnabled())
                 json.put("ok", true)
             } catch (e: Exception) {
@@ -120,27 +99,22 @@ class MainActivity : AppCompatActivity() {
             return json.toString()
         }
 
-        @JavascriptInterface
-        fun requestOpenLocationSettings() {
-            val i = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(i)
-        }
-    }
-
-    private fun isLocationEnabled(): Boolean {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val lm = applicationContext.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-                lm.isLocationEnabled
-            } else {
-                android.provider.Settings.Secure.getInt(
-                    applicationContext.contentResolver,
-                    android.provider.Settings.Secure.LOCATION_MODE
-                ) != android.provider.Settings.Secure.LOCATION_MODE_OFF
+        private fun isLocationEnabled(): Boolean {
+            return try {
+                val locationMode = Settings.Secure.getInt(
+                    context.contentResolver,
+                    Settings.Secure.LOCATION_MODE
+                )
+                locationMode != Settings.Secure.LOCATION_MODE_OFF
+            } catch (e: Exception) {
+                false
             }
-        } catch (e: Exception) {
-            false
+        }
+
+        @JavascriptInterface
+        fun openLocationSettings() {
+            val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            context.startActivity(intent)
         }
     }
 }
