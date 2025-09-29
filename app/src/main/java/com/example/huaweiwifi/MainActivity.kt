@@ -5,8 +5,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.wifi.WifiManager
 import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -24,24 +24,27 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
 
-    private val requiredPermissions = arrayOf(
-        Manifest.permission.ACCESS_FINE_LOCATION, // للحصول على SSID على Android 10+
-        Manifest.permission.ACCESS_WIFI_STATE,
-        Manifest.permission.INTERNET
-    )
+    // لائحة الأذونات (Android 13+ فيها إذن إضافي للوايفاي القريب)
+    private val requiredPermissions = buildList {
+        add(Manifest.permission.ACCESS_FINE_LOCATION)
+        add(Manifest.permission.ACCESS_WIFI_STATE)
+        add(Manifest.permission.INTERNET)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            add(Manifest.permission.NEARBY_WIFI_DEVICES)
+        }
+    }.toTypedArray()
 
     private val requestPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
-            // نعلنو للمستخدم
             var granted = true
             for ((_, v) in results) {
                 if (!v) granted = false
             }
             if (!granted) {
-                Toast.makeText(this, "لاPermissions: بعض الصلاحيات مرفوضة، قد لا تعرض SSID/RSSI.", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Permissions required for SSID/RSSI", Toast.LENGTH_LONG).show()
             } else {
-                // reload to update wifi info
-                webView.evaluateJavascript("updateNativeWifiInfo && updateNativeWifiInfo();", null)
+                // حدّث المعلومات مباشرة بعد منح الصلاحيات
+                webView.evaluateJavascript("updateNativeWifiInfo()", null)
             }
         }
 
@@ -49,25 +52,27 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // تصميم بسيط: سنعرض WebView وحيد
         webView = WebView(this)
         setContentView(webView)
 
-        // WebView settings
+        // إعدادات WebView
         val wsettings = webView.settings
         wsettings.javaScriptEnabled = true
         wsettings.domStorageEnabled = true
         webView.webViewClient = WebViewClient()
         webView.webChromeClient = WebChromeClient()
-        webView.addJavascriptInterface(WebAppInterface(this), "Android")
 
-        // طلب الصلاحيات اللازمة
+        // واجهة JS → أندرويد
+        webView.addJavascriptInterface(WebAppInterface(), "Android")
+
+        // طلب الأذونات
         checkAndRequestPermissions()
 
-        // حمل صفحة index.html من assets
+        // حمّل صفحة الويب المرفقة داخل assets/www/index.html
         webView.loadUrl("file:///android_asset/index.html")
     }
 
+    // طلب الأذونات اللي ناقصة فقط
     private fun checkAndRequestPermissions() {
         val toRequest = mutableListOf<String>()
         for (p in requiredPermissions) {
@@ -77,14 +82,13 @@ class MainActivity : AppCompatActivity() {
         }
         if (toRequest.isNotEmpty()) {
             requestPermissionLauncher.launch(toRequest.toTypedArray())
-        } else {
-            // permissions already granted: nothing special
         }
     }
 
-    // واجهة JS: توفر getWifiInfo() اللي يعطينا JSON string
-    inner class WebAppInterface(private val ctx: Context) {
+    /** واجهة متاحة لصفحة الويب */
+    inner class WebAppInterface {
 
+        /** إرجاع JSON فيه ssid/rssi وحالة الموقع */
         @JavascriptInterface
         fun getWifiInfo(): String {
             val json = JSONObject()
@@ -92,29 +96,28 @@ class MainActivity : AppCompatActivity() {
                 val wifiMgr = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
                 val info: WifiInfo? = wifiMgr.connectionInfo
 
-                // Android 8+ و10+ تحتاج صلاحية location مفعلة لإظهار SSID
                 var ssid: String? = null
                 var rssi: Int? = null
                 if (info != null) {
-                    // RSSI متاح مباشرة
-                    rssi = info.rssi
-                    // SSID قد يظهر بـ "<unknown ssid>" إذا مافيه تصاريح
-                    ssid = info.ssid
+                    rssi = info.rssi                 // قد تكون INVALID_RSSI إذا غير متاح
+                    ssid = info.ssid                 // "<unknown ssid>" إذا الموقع مطفّي
                 }
 
-                // بديل: جرب قراءة DHCP / Connectivity — لكن هنا نكتفي بهذه الطريقة
+                // تنظيف SSID
                 if (ssid == null || ssid == "<unknown ssid>") {
-                    // إذا الصلاحية مرفوضة أو الموقع مطفيّ
                     json.put("ssid", JSONObject.NULL)
                 } else {
-                    // إزالة علامات الاقتباس المحاطة بالـ SSID إن وُجدت
                     val cleaned = ssid.trim().removePrefix("\"").removeSuffix("\"")
                     json.put("ssid", cleaned)
                 }
 
-                
+                // RSSI
+                if (rssi == null || rssi == WifiInfo.INVALID_RSSI) {
+                    json.put("rssi", JSONObject.NULL)
+                } else {
+                    json.put("rssi", rssi)
+                }
 
-                // معطيات إضافية
                 json.put("locationEnabled", isLocationEnabled())
                 json.put("ok", true)
             } catch (e: Exception) {
@@ -124,27 +127,27 @@ class MainActivity : AppCompatActivity() {
             return json.toString()
         }
 
+        /** افتح إعدادات الموقع للمستخدم */
         @JavascriptInterface
         fun requestOpenLocationSettings() {
-            // يمكن استعماله من JS لفتح إعدادات الموقع
             val i = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(i)
         }
+    }
 
-        private fun isLocationEnabled(): Boolean {
-            return try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val lm = applicationContext.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-                    lm.isLocationEnabled
-                } else {
-                    // قبل API 28
-                    val mode = Settings.Secure.getInt(contentResolver, Settings.Secure.LOCATION_MODE, Settings.Secure.LOCATION_MODE_OFF)
-                    mode != Settings.Secure.LOCATION_MODE_OFF
-                }
-            } catch (e: Exception) {
-                false
+    /** هل الموقع شغّال في الجهاز؟ */
+    private fun isLocationEnabled(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val lm = applicationContext.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+                lm.isLocationEnabled
+            } else {
+                val mode = Settings.Secure.getInt(contentResolver, Settings.Secure.LOCATION_MODE, Settings.Secure.LOCATION_MODE_OFF)
+                mode != Settings.Secure.LOCATION_MODE_OFF
             }
+        } catch (_: Exception) {
+            false
         }
     }
 }
