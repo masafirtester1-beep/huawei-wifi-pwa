@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>Huawei Wifi Helper</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>📶 Huawei Wifi Helper</h1>
+
+  <div class="container">
+    <label for="gateway">أدخل عنوان الراوتر:</label>
+    <input type="text" id="gateway" placeholder="مثال: 192.168.8.1">
+    
+    <button onclick="checkStatus()">🔍 فحص الإتصال</button>
+    <button onclick="listDevices()">💻 عرض الأجهزة</button>
+  </div>
+
+  <div id="output"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
