@@ -106,11 +106,11 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // RSSI
-                if (rssi == null || rssi == WifiManager.INVALID_RSSI) {
-                    json.put("rssi", JSONObject.NULL)
-                } else {
-                    json.put("rssi", rssi)
-                }
+                if (rssi == null || rssi == android.net.wifi.WifiManager.INVALID_RSSI) {
+    json.put("rssi", JSONObject.NULL)
+} else {
+    json.put("rssi", rssi)
+}
 
                 json.put("locationEnabled", isLocationEnabled())
                 json.put("ok", true)
