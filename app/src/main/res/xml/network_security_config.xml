@@ -1,12 +1,9 @@
-
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- السماح بطلبات cleartext على كل الشبكات المحلية -->
     <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">192.168.0.0</domain>
-        <!-- لو بغيتي نطاق معين استعمل 192.168.8.1 أو domain="localhost" -->
+        <!-- السماح بالاتصال مع الراوترات على الشبكة المحلية -->
+        <domain includeSubdomains="true">192.168.8.1</domain>
+        <domain includeSubdomains="true">192.168.1.1</domain>
+        <domain includeSubdomains="true">localhost</domain>
     </domain-config>
-
-    <!-- يمكن السماح بكل cleartext كحل سريع (غير موصى به للـ prod) -->
-    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>
