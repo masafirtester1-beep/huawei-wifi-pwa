@@ -32,4 +32,17 @@
 
   <p id="statusMsg"></p>
 </body>
-</html>
+  
+<script>
+  window.onPermissionsUpdated = function(granted){
+    // حدّث الواجهة حسب النتيجة
+    // مثلا: أعد قراءة معلومات الشبكة
+    if (granted) {
+      const info = JSON.parse(Android.getWifiInfo());
+      document.getElementById('ssid').textContent = info.ssid;
+      document.getElementById('rssi').textContent = info.rssi;
+    } else {
+      alert('صلاحيات الموقع مرفوضة. فعّلها لعرض SSID.');
+    }
+  };
+</script>
