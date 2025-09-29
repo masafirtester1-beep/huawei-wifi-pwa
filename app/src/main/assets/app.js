@@ -1,162 +1,86 @@
-// Helpers
-const $ = (id) => document.getElementById(id);
-
-function logRouter(msg) {
-  const el = $('routerInfo');
-  if (!el) return;
-  el.textContent = msg;
-}
-
-// تعبئة adminUser/adminPass تلقائياً من الجسر
-function fillSavedCreds() {
-  if (window.Android && Android.getSavedCreds) {
+// ✅ تحميل بيانات المدير من التخزين
+window.onload = function () {
+  if (window.Android && Android.getCreds) {
+    let creds = Android.getCreds();
     try {
-      const creds = JSON.parse(Android.getSavedCreds());
-      if ($('adminUser')) $('adminUser').value = creds.user || 'admin';
-      if ($('adminPass')) $('adminPass').value = creds.pass || 'admin1234';
+      let parsed = JSON.parse(creds);
+      document.getElementById("adminUser").value = parsed.user || "admin";
+      document.getElementById("adminPass").value = parsed.pass || "";
     } catch (e) {
-      console.log('تعذر قراءة بيانات الدخول:', e);
+      document.getElementById("adminUser").value = "admin";
     }
-  } else {
-    // قيم افتراضية إذا كنت تختبر خارج التطبيق
-    if ($('adminUser') && !$('adminUser').value) $('adminUser').value = 'admin';
-    if ($('adminPass') && !$('adminPass').value) $('adminPass').value = 'admin1234';
   }
-}
+  updateWifiInfo();
+};
 
-// حفظ بيانات المدير
-function saveCreds() {
-  const u = ($('adminUser')?.value || '').trim();
-  const p = $('adminPass')?.value || '';
-  if (window.Android && Android.saveCreds) {
-    Android.saveCreds(u, p);
-    $('changeResult').textContent = 'تم حفظ بيانات المدير ✅';
-  } else {
-    $('changeResult').textContent = 'حُفظت محلياً (خارج التطبيق).';
-  }
-}
-
-// الاتصال بالراوتر (اختباري)
-async function tryFetchGateway() {
-  const gw = ($('gateway')?.value || '').trim();
-  if (!gw) return logRouter('ضع عنوان الراوتر أولا');
-  logRouter('جارٍ الاتصال...');
-  try {
-    await fetch(`http://${gw}/`, { mode: 'no-cors' });
-    logRouter('تم الوصول (قد لا تظهر الاستجابة بسبب CORS).');
-  } catch (err) {
-    logRouter('خطأ في الاتصال: ' + err.message);
-  }
-}
-
-async function tryFetchDevices() {
-  const gw = ($('gateway')?.value || '').trim();
-  if (!gw) return logRouter('أدخل عنوان الراوتر أولاً');
-  try {
-    await fetch(`http://${gw}/device_list`, { mode: 'no-cors' });
-    logRouter('طُلِبت قائمة الأجهزة — قد تحتاج تعديل المسار حسب الراوتر.');
-  } catch (e) {
-    logRouter('فشل طلب الأجهزة — ' + e.message);
-  }
-}
-
-// مظهر الـ SSID من بعض الأجهزة يرجع بين ""
-function formatSsid(raw) {
-  if (!raw) return 'غير متصل';
-  return raw.startsWith('"') && raw.endsWith('"') ? raw.slice(1, -1) : raw;
-}
-function formatRssi(val) {
-  if (typeof val === 'number') return `${val} dBm`;
-  if (typeof val === 'string' && val.trim() !== '') return `${val} dBm`;
-  return 'غير معروف';
-}
-
-// تحديث معلومات الواي-فاي من الواجهة Native (Huawei أو قراءة مباشرة)
-function updateNativeWifiInfo() {
-  const gw = ($('gateway')?.value || '').trim();
-  const u = ($('adminUser')?.value || 'admin').trim();
-  const p = $('adminPass')?.value || '';
-
-  if (window.Android && Android.getHuaweiWifiInfo && gw && u) {
-    try {
-      const raw = Android.getHuaweiWifiInfo(gw, u, p);
-      const data = JSON.parse(raw);
-      if (data.ok) {
-        $('ssid').textContent = formatSsid(data.ssid || '');
-        $('rssi').textContent = formatRssi(data.rssi || '');
-      } else {
-        $('ssid').textContent = 'خطأ';
-        $('rssi').textContent = 'خطأ';
-      }
-    } catch {
-      $('ssid').textContent = 'خطأ';
-      $('rssi').textContent = 'خطأ';
-    }
-    return;
-  }
-
-  // بديل: قراءة من Android.getWifiInfo (بدون تسجيل دخول)
+// ✅ تحديث معلومات الشبكة (SSID, RSSI)
+function updateWifiInfo() {
   if (window.Android && Android.getWifiInfo) {
+    let info = Android.getWifiInfo();
     try {
-      const info = JSON.parse(Android.getWifiInfo());
-      $('ssid').textContent = formatSsid(info.ssid);
-      $('rssi').textContent = formatRssi(info.rssi);
+      let parsed = JSON.parse(info);
+      document.getElementById("ssid").innerText = parsed.ssid || "غير متاح";
+      document.getElementById("rssi").innerText = parsed.rssi || "غير متاح";
     } catch (e) {
-      $('ssid').textContent = 'غير متاح';
-      $('rssi').textContent = 'غير متاح';
+      document.getElementById("ssid").innerText = "خطأ";
+      document.getElementById("rssi").innerText = "خطأ";
     }
   } else {
-    $('ssid').textContent = 'غير متاح (خارج التطبيق)';
-    $('rssi').textContent = 'غير متاح';
+    document.getElementById("ssid").innerText = "غير متاح (خارج التطبيق)";
+    document.getElementById("rssi").innerText = "غير متاح";
   }
 }
 
-// تغيير كلمة السر — Native (Huawei HiLink)
-function changeWifiPassword() {
-  const gw = ($('gateway')?.value || '').trim();
-  const newPass = ($('newPass')?.value || '').trim();
-  const u = ($('adminUser')?.value || '').trim();
-  const p = $('adminPass')?.value || '';
+// ✅ فحص الاتصال بالراوتر
+function checkConnection() {
+  document.getElementById("statusMsg").innerText = "🔍 جاري الفحص...";
+  // Placeholder (يمكنك تعديل المسار حسب الراوتر)
+  fetch("http://192.168.1.1")
+    .then(r => {
+      document.getElementById("statusMsg").innerText = "📶 الراوتر متاح";
+    })
+    .catch(e => {
+      document.getElementById("statusMsg").innerText = "❌ تعذر الاتصال بالراوتر";
+    });
+}
 
-  if (!gw || !newPass || !u) {
-    $('changeResult').textContent = 'عَمِّر جميع الحقول المطلوبة';
-    return;
-  }
+// ✅ طلب عرض الأجهزة (عام)
+function getDevices() {
+  document.getElementById("statusMsg").innerText = "💻 طلب قائمة الأجهزة...";
+  // Placeholder فقط – المسار يختلف حسب الراوتر
+}
 
-  // حفظ البيانات قبل الإرسال
-  saveCreds();
-
-  if (window.Android && Android.changeWifiPasswordHuawei) {
-    try {
-      const raw = Android.changeWifiPasswordHuawei(gw, u, p, newPass);
-      const data = JSON.parse(raw);
-      $('changeResult').textContent = data.ok
-        ? 'تم تغيير كلمة السر ✅ (قد تحتاج إعادة الاتصال بالشبكة).'
-        : 'فشل: ' + (data.error || 'غير معروف');
-    } catch {
-      $('changeResult').textContent = 'رد غير متوقع من الواجهة.';
-    }
+// ✅ طلب صلاحيات
+function requestPermissions() {
+  if (window.Android && Android.requestPermissions) {
+    Android.requestPermissions();
   } else {
-    $('changeResult').textContent = 'الميزة Native غير متاحة في هذا البناء.';
+    alert("الميزة Native غير متاحة في هذا البناء.");
   }
 }
 
-// ربط الأزرار
-document.addEventListener('DOMContentLoaded', () => {
-  fillSavedCreds();
+// ✅ حفظ بيانات المدير
+function saveCreds() {
+  let user = document.getElementById("adminUser").value;
+  let pass = document.getElementById("adminPass").value;
+  if (window.Android && Android.saveCreds) {
+    Android.saveCreds(user, pass);
+    document.getElementById("statusMsg").innerText = "💾 تم حفظ البيانات";
+  } else {
+    document.getElementById("statusMsg").innerText = "❌ الميزة Native غير متاحة";
+  }
+}
 
-  $('checkBtn')?.addEventListener('click', tryFetchGateway);
-  $('devicesBtn')?.addEventListener('click', tryFetchDevices);
+// ✅ تغيير كلمة السر
+function changePassword() {
+  let newPass = document.getElementById("newWifiPass").value;
+  let user = document.getElementById("adminUser").value;
+  let pass = document.getElementById("adminPass").value;
 
-  $('permBtn')?.addEventListener('click', () => {
-    if (window.Android && Android.requestPermissions) Android.requestPermissions();
-    updateNativeWifiInfo();
-  });
-
-  $('saveCredsBtn')?.addEventListener('click', saveCreds);
-  $('changePassBtn')?.addEventListener('click', changeWifiPassword);
-
-  updateNativeWifiInfo();
-  // تحديث دوري (اختياري)
-  setInterval(updateNativeWifiInfo, 6000);
-});
+  if (window.Android && Android.changePassword) {
+    let result = Android.changePassword(user, pass, newPass);
+    document.getElementById("statusMsg").innerText = result;
+  } else {
+    document.getElementById("statusMsg").innerText = "⚠️ الميزة Native غير متاحة في هذا البناء.";
+  }
+}
