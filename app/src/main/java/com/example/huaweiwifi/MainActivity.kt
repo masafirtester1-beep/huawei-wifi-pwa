@@ -24,7 +24,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
 
-    // لائحة الأذونات (Android 13+ فيها إذن إضافي للواي فاي القريب)
+    // لائحة الأذونات (Android 13+ فيه إذن إضافي للوايفاي القريب)
     private val requiredPermissions = buildList {
         add(Manifest.permission.ACCESS_FINE_LOCATION)
         add(Manifest.permission.ACCESS_WIFI_STATE)
@@ -34,27 +34,38 @@ class MainActivity : AppCompatActivity() {
         }
     }.toTypedArray()
 
+    private val permissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+            val denied = results.filterValues { !it }
+            if (denied.isNotEmpty()) {
+                Toast.makeText(this, "خاصك تعطي جميع الصلاحيات باش التطبيق يخدم", Toast.LENGTH_LONG).show()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         webView = WebView(this)
-
-        // تفعيل الجافاسكريبت
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
-
-        // إضافة واجهة جافاسكريبت
-        webView.addJavascriptInterface(WebAppInterface(this), "Android")
-
-        webView.webViewClient = WebViewClient()
-        webView.webChromeClient = WebChromeClient()
-
         setContentView(webView)
 
-        // تحميل صفحة من assets
-        webView.loadUrl("file:///android_asset/index.html")
+        // طلب الصلاحيات
+        if (!hasAllPermissions()) {
+            permissionLauncher.launch(requiredPermissions)
+        }
 
-        // طلب الأذونات
-        ActivityCompat.requestPermissions(this, requiredPermissions, 1)
+        // إعداد WebView
+        webView.settings.javaScriptEnabled = true
+        webView.webViewClient = WebViewClient()
+        webView.webChromeClient = WebChromeClient()
+        webView.addJavascriptInterface(WebAppInterface(this), "Android")
+
+        // حمّل صفحة ويب ديالك (غيّر الرابط إذا بغيت)
+        webView.loadUrl("file:///android_asset/index.html")
+    }
+
+    private fun hasAllPermissions(): Boolean {
+        return requiredPermissions.all {
+            ActivityCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
     }
 
     inner class WebAppInterface(private val context: Context) {
@@ -70,8 +81,8 @@ class MainActivity : AppCompatActivity() {
                 var rssi: Int? = null
 
                 if (info != null) {
-                    ssid = info.ssid
                     rssi = info.rssi
+                    ssid = info.ssid
                 }
 
                 // تنظيف SSID
@@ -82,14 +93,13 @@ class MainActivity : AppCompatActivity() {
                     json.put("ssid", cleaned)
                 }
 
-                // التحقق من RSSI
+                // RSSI
                 if (rssi == null || rssi == android.net.wifi.WifiManager.INVALID_RSSI) {
                     json.put("rssi", JSONObject.NULL)
                 } else {
                     json.put("rssi", rssi)
                 }
 
-                // حالة تفعيل الموقع
                 json.put("locationEnabled", isLocationEnabled())
                 json.put("ok", true)
             } catch (e: Exception) {
@@ -99,22 +109,21 @@ class MainActivity : AppCompatActivity() {
             return json.toString()
         }
 
-        private fun isLocationEnabled(): Boolean {
-            return try {
-                val locationMode = Settings.Secure.getInt(
-                    context.contentResolver,
-                    Settings.Secure.LOCATION_MODE
-                )
-                locationMode != Settings.Secure.LOCATION_MODE_OFF
-            } catch (e: Exception) {
-                false
-            }
-        }
-
         @JavascriptInterface
         fun openLocationSettings() {
             val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
             context.startActivity(intent)
+        }
+    }
+
+    @SuppressLint("ObsoleteSdkInt")
+    private fun isLocationEnabled(): Boolean {
+        val locationMode: Int
+        return try {
+            locationMode = Settings.Secure.getInt(contentResolver, Settings.Secure.LOCATION_MODE)
+            locationMode != Settings.Secure.LOCATION_MODE_OFF
+        } catch (e: Exception) {
+            false
         }
     }
 }
