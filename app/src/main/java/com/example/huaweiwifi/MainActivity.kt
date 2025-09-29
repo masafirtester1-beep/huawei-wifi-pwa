@@ -1,14 +1,13 @@
 package com.example.huaweiwifi
 
 import android.annotation.SuppressLint
+import android.net.wifi.WifiManager
 import android.os.Bundle
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import android.content.Context
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
@@ -17,34 +16,46 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         val webView = WebView(this)
+        webView.settings.javaScriptEnabled = true
+        webView.webViewClient = WebViewClient()
 
-        // إعدادات مهمة باش ما تبقاش شاشة بيضا
-        val s: WebSettings = webView.settings
-        s.javaScriptEnabled = true
-        s.domStorageEnabled = true
-        s.loadsImagesAutomatically = true
-        s.allowFileAccess = true
-        s.allowContentAccess = true
-        s.javaScriptCanOpenWindowsAutomatically = true
-        // mixed content (مفيد إلا كان http)
-        s.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        // Register JavaScript interface
+        webView.addJavascriptInterface(AndroidBridge(this), "Android")
 
-        // باش يفتح داخل التطبيق ومايخرجش للمتصفح
-        webView.webViewClient = object : WebViewClient() {
-            override fun onReceivedError(
-                view: WebView,
-                request: WebResourceRequest,
-                error: android.webkit.WebResourceError
-            ) {
-                Toast.makeText(this@MainActivity, "WebView error: ${error.description}", Toast.LENGTH_LONG).show()
-            }
-        }
-
-        webView.webChromeClient = WebChromeClient()
-
-        // حمّل index.html من الأصول
+        // load the local assets/index.html
         webView.loadUrl("file:///android_asset/index.html")
 
         setContentView(webView)
+    }
+
+    class AndroidBridge(private val ctx: Context) {
+        // Called from JS: window.Android.getWifiInfo()
+        @android.webkit.JavascriptInterface
+        fun getWifiInfo(): String {
+            val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val wifiInfo = wm.connectionInfo
+            val rssi = wifiInfo.rssi // RSSI in dBm
+            val ssid = wifiInfo.ssid ?: ""
+            val gateway = getGateway(ctx) // يمكنك تنفيذ طريقة لاستخراج gateway إن أردت
+
+            val jo = JSONObject()
+            jo.put("rssi", rssi)
+            jo.put("ssid", ssid)
+            jo.put("gateway", gateway)
+            return jo.toString()
+        }
+
+        private fun getGateway(ctx: Context): String? {
+            try {
+                val wm = ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                val dhcp = wm.dhcpInfo
+                val gw = dhcp.gateway
+                // convert int to dotted ip:
+                val ip = (gw and 0xFF).toString() + "." + ((gw shr 8) and 0xFF) + "." + ((gw shr 16) and 0xFF) + "." + ((gw shr 24) and 0xFF)
+                return ip
+            } catch (e: Exception) {
+                return null
+            }
+        }
     }
 }
